@@ -28,10 +28,10 @@ export function getCookieValue(cookieHeader: string | undefined, cookieName: str
 
 export const cookieOptions = {
   httpOnly: true,
-  sameSite: env.cookieSameSite,
-  secure: env.cookieSecure,
+  sameSite: "none" as const,
+  secure: true,
   path: "/",
-  maxAge: env.sessionMaxAgeMs,
+  maxAge: env.sessionMaxAgeMs || 10 * 60 * 1000,
 };
 
 // Stateless, HMAC-signed OAuth state. The state token embeds its own expiration
