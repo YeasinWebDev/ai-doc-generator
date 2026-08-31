@@ -25,12 +25,12 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "prisma": "^7.9.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.2.0",
+    "@types/node": "^24.13.3",
     "nodemon": "^3.1.14",
+    "prisma": "^7.9.1",
     "tsx": "^4.23.12",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.2"
   }
 }
