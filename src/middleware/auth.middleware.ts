@@ -1,7 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 
-import { sessionService } from "../services/session.service.js";
-import { verifySessionId } from "../utils/crypto.js";
+import { sessionService, getCookieValue } from "../services/session.service.js";
 import prisma from "../lib/prisma.js";
 
 export async function attachSession(req: Request, _res: Response, next: NextFunction): Promise<void> {
@@ -16,11 +15,7 @@ export async function attachSession(req: Request, _res: Response, next: NextFunc
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const sessionId = req.headers.cookie
-    ?.split(";")
-    .map((entry) => entry.trim())
-    .find((entry) => entry.startsWith("app_session="))
-    ?.slice("app_session=".length);
+  const sessionId = getCookieValue(req.headers.cookie, "app_session");
 
 
   if (!sessionId) {

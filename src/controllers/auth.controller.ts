@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 
 import { env } from "../config/env.js";
 import { githubAuthService } from "../services/github-auth.service.js";
-import { cookieOptions, sessionService } from "../services/session.service.js";
+import { cookieOptions, getCookieValue, sessionService } from "../services/session.service.js";
 
 const AUTH_ERROR_CODE = "AUTH_ERROR";
 
@@ -20,7 +20,6 @@ export const authController = {
   async loginWithGitHub(_req: Request, res: Response): Promise<void> {
     try {
       const state = sessionService.generateStateCookieValue();
-      sessionService.storeOauthState(state);
 
       res.cookie("github_oauth_state", state, {
         ...cookieOptions,
@@ -103,14 +102,10 @@ export const authController = {
   },
 
   async logout(req: Request, res: Response): Promise<void> {
-    const sessionId = req.headers.cookie
-      ?.split(";")
-      .map((entry) => entry.trim())
-      .find((entry) => entry.startsWith("app_session="))
-      ?.slice("app_session=".length);
+    const sessionId = getCookieValue(req.headers.cookie, "app_session");
 
     if (sessionId) {
-      await sessionService.deleteSession(decodeURIComponent(sessionId));
+      await sessionService.deleteSession(sessionId);
     }
 
     res.clearCookie("app_session", { ...cookieOptions, path: "/" });

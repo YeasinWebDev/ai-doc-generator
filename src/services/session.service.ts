@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 import type { Request } from "express";
 
 import prisma from "../lib/prisma.js";
@@ -5,9 +7,9 @@ import { env } from "../config/env.js";
 import type { AppSession, GitHubUser } from "../types/auth.types.js";
 import { generateSessionId, generateSecureToken } from "../utils/crypto.js";
 
-const oauthStates = new Map<string, number>();
+const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
-function getCookieValue(cookieHeader: string | undefined, cookieName: string): string | undefined {
+export function getCookieValue(cookieHeader: string | undefined, cookieName: string): string | undefined {
   if (!cookieHeader) {
     return undefined;
   }
@@ -26,11 +28,50 @@ function getCookieValue(cookieHeader: string | undefined, cookieName: string): s
 
 export const cookieOptions = {
   httpOnly: true,
-  sameSite: "none" as const,
-  secure: env.nodeEnv === "production",
+  sameSite: env.cookieSameSite,
+  secure: env.cookieSecure,
   path: "/",
   maxAge: env.sessionMaxAgeMs,
 };
+
+// Stateless, HMAC-signed OAuth state. The state token embeds its own expiration
+// (token.expiresAt.signature) and is verified with SESSION_SECRET, so the value
+// works across serverless instances (an in-memory Map is lost between cold
+// starts on Vercel and would randomly break logins).
+function signOAuthState(state: string, expiresAt: number): string {
+  return crypto.createHmac("sha256", env.sessionSecret).update(`${state}.${expiresAt}`).digest("hex");
+}
+
+function buildSignedOAuthState(): string {
+  const token = generateSecureToken(24);
+  const expiresAt = Date.now() + OAUTH_STATE_MAX_AGE_MS;
+  return `${token}.${expiresAt}.${signOAuthState(token, expiresAt)}`;
+}
+
+function verifyOAuthState(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const [token, expiresAtRaw, signature] = value.split(".");
+  if (!token || !expiresAtRaw || !signature) {
+    return false;
+  }
+
+  const expiresAt = Number(expiresAtRaw);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    return false;
+  }
+
+  const expected = Buffer.from(signOAuthState(token, expiresAt));
+  const actual = Buffer.from(signature);
+
+  if (expected.length !== actual.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(actual, expected);
+}
 
 export const sessionService = {
   async createSession(user: GitHubUser, githubAccessToken: string): Promise<AppSession> {
@@ -119,27 +160,13 @@ export const sessionService = {
   },
 
 
-  storeOauthState(state: string): void {
-    oauthStates.set(state, Date.now() + 10 * 60 * 1000);
+  storeOauthState(_state: string): void {
+    // Deprecated: OAuth state is now stateless (HMAC-signed) so it survives
+    // serverless cold starts. Kept as a no-op for API compatibility.
   },
 
   consumeOauthState(state: string | undefined): boolean {
-    if (!state) {
-      return false;
-    }
-
-    const expiresAt = oauthStates.get(state);
-    if (!expiresAt) {
-      return false;
-    }
-
-    if (expiresAt <= Date.now()) {
-      oauthStates.delete(state);
-      return false;
-    }
-
-    oauthStates.delete(state);
-    return true;
+    return verifyOAuthState(state);
   },
 
   getOauthStateFromRequest(req: Request): string | undefined {
@@ -147,6 +174,6 @@ export const sessionService = {
   },
 
   generateStateCookieValue(): string {
-    return generateSecureToken(24);
+    return buildSignedOAuthState();
   },
 };

@@ -144,10 +144,19 @@ allow_signup=true
 1. Set `app_session` cookie with session ID
 2. Cookie options:
    - `httpOnly: true` - Can't be accessed by JavaScript
-   - `sameSite: lax` - CSRF protection
-   - `secure: true` (production only) - Only sent over HTTPS
+   - `sameSite` - Controlled by `COOKIE_SAME_SITE` env (defaults to `lax` in production, `none` in development)
+   - `secure` - Controlled by `COOKIE_SECURE` env (defaults to `true` in production, `false` in development)
    - `maxAge` - Session expiration time
 3. Redirect to frontend URL (user is now logged in!)
+
+> ⚠️ **Critical production requirement:** The Express backend and the Next.js frontend
+> MUST be on the **same site** (same registrable domain) for `app_session` to work.
+> The simplest way is to proxy the API through the Next.js app with `rewrites()` in
+> `next.config.js` (see "Deploying to Production" below), or use custom domains such as
+> `app.example.com` (Next.js) + `api.example.com` (Express). Firefox blocks third-party
+> cookies by default and Chrome blocks them too, so a cross-site deployment (two
+> different `*.vercel.app` URLs) will never store/send `app_session` reliably — no
+> `SameSite` value can fix that.
 
 ### Step 9: Subsequent Requests - Session Retrieval
 **Middleware:** [src/middleware/auth.middleware.ts](src/middleware/auth.middleware.ts) - `attachSession()`
@@ -208,8 +217,8 @@ Use `requireAuth` middleware to ensure user is authenticated before allowing acc
 - `createSession()` - Creates user & session in DB
 - `getSession()` - Retrieves session by ID
 - `getSessionFromRequest()` - Extracts session from cookies
-- `generateStateCookieValue()` - Creates CSRF token
-- `storeOauthState()` / `consumeOauthState()` - Manages OAuth state
+- `generateStateCookieValue()` - Creates stateless, HMAC-signed CSRF state
+- `consumeOauthState()` - Verifies the signed state (no server memory needed, survives serverless cold starts)
 
 **Why it matters:** Manages session persistence and CSRF protection
 
@@ -264,6 +273,8 @@ Use `requireAuth` middleware to ensure user is authenticated before allowing acc
 - `GITHUB_CALLBACK_URL` - OAuth callback URL
 - `SESSION_MAX_AGE_MS` - Session duration
 - `FRONTEND_URL` - Frontend redirect URL
+- `COOKIE_SAME_SITE` - Optional: `lax` (default in production) | `strict` | `none`
+- `COOKIE_SECURE` - Optional: `true` (default in production) | `false`
 
 **Why it matters:** Centralized configuration management
 
@@ -337,6 +348,47 @@ NODE_ENV=development
 
 ---
 
+## Deploying to Production (Important)
+
+Firefox and Chrome both **block third-party cookies** by default, so the backend and
+frontend **must share the same registrable domain**. Two separate `*.vercel.app`
+deployments are cross-site and the `app_session` cookie will be dropped / never sent —
+this is exactly the "Firefox doesn't set `app_session`, Chrome sets it but API returns
+401" symptom.
+
+### Option A (recommended): Proxy the API through Next.js rewrites
+
+In the frontend project's `next.config.js`:
+
+```js
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${process.env.BACKEND_URL}/api/:path*`, // e.g. https://your-backend.vercel.app
+      },
+    ];
+  },
+};
+
+module.exports = nextConfig;
+```
+
+- All browser traffic stays on your frontend origin; the cookie is **first-party**.
+- Update GitHub OAuth App → callback URL to `https://<frontend-domain>/api/auth/github/callback`
+  and set the backend `GITHUB_CALLBACK_URL` env to the same value.
+- Frontend fetches use `fetch("/api/...", { credentials: "include" })` (same-origin).
+- Backend runs with the defaults: `COOKIE_SAME_SITE=lax`, `COOKIE_SECURE=true`.
+
+### Option B: Same-site custom domains
+
+- Frontend: `https://app.example.com` · Backend: `https://api.example.com`
+- `example.com` is the shared registrable domain, so `SameSite=Lax` cookies set by the
+  backend are sent on cross-origin (but same-site) fetches from the frontend. Keep
+  `FRONTEND_URL=https://app.example.com` and `COOKIE_SAME_SITE=lax`.
+
 ## Common Issues & Solutions
 
 | Issue | Cause | Solution |
@@ -346,6 +398,7 @@ NODE_ENV=development
 | "Redirect URI mismatch" | URL doesn't match GitHub app settings | Update GitHub OAuth app settings |
 | "CORS error" | Frontend/Backend domain mismatch | Set proper `FRONTEND_URL` |
 | "Session not found" | Cookie not sent or expired | Check cookie settings & expiration |
+| `app_session` not set in Firefox / 401 in Chrome | Frontend and backend are **cross-site**; browsers block third-party cookies | Put frontend + backend on the same site (Next.js `rewrites()` or shared registrable domain), see "Deploying to Production" |
 
 ---
 
