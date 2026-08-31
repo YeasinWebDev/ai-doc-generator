@@ -36,6 +36,19 @@ function resolveCookieSecure(isProduction: boolean): boolean {
   return isProduction;
 }
 
+const DEFAULT_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
+
+function resolveSessionMaxAgeMs(): number {
+  const configured = Number(process.env.SESSION_MAX_AGE);
+  // Guard against invalid values such as "0" (previously shipped in .env.example):
+  // maxAge: 0 produces "Set-Cookie: Max-Age=0", which makes browsers drop the
+  // session cookie immediately, and instantly-expired session rows in the DB.
+  if (Number.isFinite(configured) && configured > 0) {
+    return configured;
+  }
+  return DEFAULT_SESSION_MAX_AGE_MS;
+}
+
 export const env = {
   port: Number(process.env.PORT ?? 5000),
   githubClientId: process.env.GITHUB_CLIENT_ID!,
@@ -45,7 +58,7 @@ export const env = {
   sessionSecret: process.env.SESSION_SECRET!,
   databaseUrl: process.env.DATABASE_URL!,
   nodeEnv: process.env.NODE_ENV ?? "development",
-  sessionMaxAgeMs: Number(process.env.SESSION_MAX_AGE ?? 1000 * 60 * 60 * 24 * 7),
+  sessionMaxAgeMs: resolveSessionMaxAgeMs(),
   cookieSameSite: resolveCookieSameSite(process.env.NODE_ENV === "production"),
   cookieSecure: resolveCookieSecure(process.env.NODE_ENV === "production"),
   openaiApiKey: process.env.OPENROUTER_API_KEY,

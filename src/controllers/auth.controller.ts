@@ -47,16 +47,16 @@ export const authController = {
         return;
       }
 
-      // const cookieState = sessionService.getOauthStateFromRequest(req);
-      // if (!cookieState || cookieState !== state || !sessionService.consumeOauthState(state)) {
-      //   buildErrorResponse(res, 400, "Invalid or expired OAuth state.", "INVALID_OAUTH_STATE");
-      //   return;
-      // }
+      const cookieState = sessionService.getOauthStateFromRequest(req);
+      if (!cookieState || cookieState !== state || !sessionService.consumeOauthState(state)) {
+        buildErrorResponse(res, 400, "Invalid or expired OAuth state.", "INVALID_OAUTH_STATE");
+        return;
+      }
 
-      // res.clearCookie("github_oauth_state", {
-      //   ...cookieOptions,
-      //   path: "/",
-      // });
+      res.clearCookie("github_oauth_state", {
+        ...cookieOptions,
+        path: "/",
+      });
 
       const { accessToken } = await githubAuthService.exchangeCodeForToken(code);
       const user = await githubAuthService.getAuthenticatedUser(accessToken);

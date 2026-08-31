@@ -271,7 +271,7 @@ Use `requireAuth` middleware to ensure user is authenticated before allowing acc
 - `GITHUB_CLIENT_ID` - Your GitHub OAuth app ID
 - `GITHUB_CLIENT_SECRET` - Your GitHub OAuth app secret
 - `GITHUB_CALLBACK_URL` - OAuth callback URL
-- `SESSION_MAX_AGE_MS` - Session duration
+- `SESSION_MAX_AGE` - Session duration in ms
 - `FRONTEND_URL` - Frontend redirect URL
 - `COOKIE_SAME_SITE` - Optional: `lax` (default in production) | `strict` | `none`
 - `COOKIE_SECURE` - Optional: `true` (default in production) | `false`
@@ -313,7 +313,7 @@ GITHUB_CLIENT_SECRET=your_github_app_secret
 GITHUB_CALLBACK_URL=http://localhost:3000/auth/github/callback
 
 # Session
-SESSION_MAX_AGE_MS=2592000000  # 30 days in milliseconds
+SESSION_MAX_AGE=2592000000  # 30 days in milliseconds
 
 # Frontend
 FRONTEND_URL=http://localhost:3000
