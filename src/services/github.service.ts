@@ -36,6 +36,21 @@ export const getRepositoryInfo = async (username: string, repo: string) => {
   }
 };
 
+export const getUserRepositories = async (username: string,search:string = "", page:number = 1,perPage:number = 30) => {
+  try {
+    const octokit = getOctokit();
+    const { data } = await octokit.rest.search.repos({
+      q: `user:${username} ${search}`,
+      per_page: perPage,
+      page: page,
+    });
+    return data;
+  } catch (error) {
+    console.error("Error fetching user repositories:", error);
+    throw error;
+  }
+};
+
 export const getRepositoryTree = async (
   username: string,
   repo: string,

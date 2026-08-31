@@ -1,8 +1,9 @@
 import type { Request, Response } from "express";
 import { parseGithubUrl } from "../utils/github.utils.js";
-import { getRepositoryTree } from "../services/github.service.js";
+import { getRepositoryTree, getUserRepositories } from "../services/github.service.js";
 import { shouldIncludeFile } from "../utils/projectFiles.js";
 import { generateDocumentation } from "../services/ai.service.js";
+import prisma from "../lib/prisma.js";
 
 export const documentationController = async (req: Request, res: Response) => {
   try {
@@ -20,9 +21,38 @@ export const documentationController = async (req: Request, res: Response) => {
 
     const aiResponse = await generateDocumentation(filteredFiles.map((file) => file.path).join("\n"));
 
+    if (!aiResponse) {
+      return res.status(500).json({ error: "AI response is empty" });
+    }
+
+    const existingDoc = await prisma.aiGeneratedDocuments.findFirst({
+      where: { repoUrl: url, userGithubId: req.user?.id as string },
+    });
+
+    let doc;
+    
+    if (existingDoc) {
+      doc = await prisma.aiGeneratedDocuments.update({
+        where: { id: existingDoc.id },
+        data: {
+          documentation: aiResponse,
+        },
+      });
+    } else {
+      doc = await prisma.aiGeneratedDocuments.create({
+        data: {
+          userGithubId: req.user?.id as string,
+          repoUrl: url,
+          documentation: aiResponse,
+        },
+      });
+    }
+
     return res.status(200).json({
+      success: true,
       message: "Documentation generation started",
       aiResponse,
+      documentId: doc.id,
     });
   } catch (error) {
     console.error("Error in documentationController:", error);
@@ -33,6 +63,70 @@ export const documentationController = async (req: Request, res: Response) => {
       });
     }
 
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getUserRepositoriesController = async (req: Request, res: Response) => {
+  try {
+    const { username, page, perPage, search } = req.query;
+    const repositories = await getUserRepositories(username as string, search as string, Number(page) || 1, Number(perPage) || 30);
+    return res.status(200).json(repositories);
+  } catch (error) {
+    console.error("Error in getRepositories:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getDocumentationByIdController = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: "ID is required" });
+    }
+
+    const document = await prisma.aiGeneratedDocuments.findUnique({
+      where: { id: id as string },
+    });
+
+    if (!document) {
+      return res.status(404).json({ error: "Document not found" });
+    }
+
+    if (document.userGithubId !== req.user?.id) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    return res.status(200).json({ success: true, document });
+  } catch (error) {
+    console.error("Error in getDocumentationByIdController:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getUserGeneratedDocumentsController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const documents = await prisma.aiGeneratedDocuments.findMany({
+      where: { userGithubId: userId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        repoUrl: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.status(200).json({ success: true, documents });
+  } catch (error) {
+    console.error("Error in getUserGeneratedDocumentsController:", error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 };
