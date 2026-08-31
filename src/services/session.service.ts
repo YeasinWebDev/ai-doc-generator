@@ -26,7 +26,7 @@ function getCookieValue(cookieHeader: string | undefined, cookieName: string): s
 
 export const cookieOptions = {
   httpOnly: true,
-  sameSite: "lax" as const,
+  sameSite: "none" as const,
   secure: env.nodeEnv === "production",
   path: "/",
   maxAge: env.sessionMaxAgeMs,
