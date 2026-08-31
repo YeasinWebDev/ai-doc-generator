@@ -66,3 +66,17 @@ export const env = {
 } as const;
 
 export const isProduction = env.nodeEnv === "production";
+
+// Cross-site ("none") cookies rely on third-party cookie support, which Firefox
+// (Enhanced Tracking Protection / Total Cookie Protection) and Safari block or
+// partition by default. Chrome still allows them today, which makes login look
+// like it works — until Firefox users try to sign in (401 on /api/auth/me).
+if (isProduction && env.cookieSameSite === "none") {
+  console.warn(
+    "[auth] COOKIE_SAME_SITE=none in production: Firefox and Safari block or partition " +
+      "third-party cookies, so app_session will not be sent for cross-site frontends " +
+      "(login works in Chrome but fails in Firefox). Deploy same-site instead: proxy the " +
+      "API through Next.js rewrites or use a shared registrable domain, and leave " +
+      "COOKIE_SAME_SITE unset so it defaults to lax."
+  );
+}
